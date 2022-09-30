@@ -15,10 +15,13 @@ app.use(express.json())
 // middleware - cors
 const corsOptions = {
     // from which URLs do we want to accept requests
-    origin: (process.env.NODE_ENV == "production") ? 'https://talesfrom.space/ghe' : 'localhost:3000',
+    origin: (process.env.NODE_ENV == "production") ? 'https://talesfrom.space/ghe' : 'http://localhost:3000',
+
     credentials: true, 
     optionsSuccessStatus: 204
 }
+app.use(cors(corsOptions));
+
 
 app.use('/user', routes.user);
 app.use('/users', routes.user);
