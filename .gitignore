@@ -14,6 +14,10 @@
 # dev environment
 *.code-workspace
 
+# docker
+docker_commands.txt
+/db/Dockerfile
+
 # misc
 .DS_Store
 .env.local

@@ -15,8 +15,7 @@ app.use(express.json())
 // middleware - cors
 const corsOptions = {
     // from which URLs do we want to accept requests
-    origin: (process.env.NODE_ENV == "production") ? 'https://talesfrom.space/ghe' : 'http://localhost:3000',
-
+    origin: (process.env.NODE_ENV == "production") ? 'https://ghesports.dev/app/' : 'http://localhost:49160',
     credentials: true, 
     optionsSuccessStatus: 204
 }
