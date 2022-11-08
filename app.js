@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const session = require('express-session')
@@ -13,29 +13,13 @@ const app = express()
 app.use(express.json())
 
 
-let decideOrigin = "";
 
-switch (process.env.NODE_ENV ) {
-    case ("production"):
-        decideOrigin = 'https://ghesports.org/'
-        break;
-
-    case ("development"):
-        decideOrigin = 'https://ghesports.dev/'
-        break;
-
-    case ("local"):
-        decideOrigin = 'https://localhost:3000/'
-        break;
-    default:
-        break;
-}
 
 
 // middleware - cors
 const corsOptions = {
     // from which URLs do we want to accept requests
-    origin: decideOrigin,
+    origin: process.env.FRONT_URL,
     credentials: true, 
     optionsSuccessStatus: 204
 }

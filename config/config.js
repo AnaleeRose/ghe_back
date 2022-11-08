@@ -5,7 +5,7 @@ module.exports = {
       "password": "sqlshar3d",
       "database": "ghe_dev",
       "host": "localhost",
-      "port":5432,
+      "port": 5432,
       "dialect": "postgres"
     },
     // "test": {
