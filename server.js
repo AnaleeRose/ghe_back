@@ -1,7 +1,8 @@
 const app = require('./app')
 const port = process.env.PORT || 8000
 
-const env = process.env.NODE_ENV || 'development';
+const env = process.env.NODE_ENV || 'local';
+console.log(env);
 const config = require(__dirname + '/config/config.js')[env];
 
 // connection
