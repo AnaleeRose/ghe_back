@@ -12,10 +12,30 @@ const app = express()
 // middleware - JSON parsing
 app.use(express.json())
 
+
+let decideOrigin = "";
+
+switch (process.env.NODE_ENV ) {
+    case ("production"):
+        decideOrigin = 'https://ghesports.org/'
+        break;
+
+    case ("development"):
+        decideOrigin = 'https://ghesports.dev/'
+        break;
+
+    case ("local"):
+        decideOrigin = 'https://localhost:3000/'
+        break;
+    default:
+        break;
+}
+
+
 // middleware - cors
 const corsOptions = {
     // from which URLs do we want to accept requests
-    origin: (process.env.NODE_ENV == "production") ? 'https://ghesports.dev/app/' : 'http://localhost:49160',
+    origin: decideOrigin,
     credentials: true, 
     optionsSuccessStatus: 204
 }

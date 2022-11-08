@@ -23,4 +23,4 @@ COPY . .
 EXPOSE 8000
 
 # CMD [ "npm", "start -- --port 8080" ]
-CMD [ "node", "server.js" ]
+# CMD [ "node", "server.js" ]
