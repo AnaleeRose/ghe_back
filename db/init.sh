@@ -266,6 +266,8 @@ COPY public.users (id, name, email, mod_score, admin) FROM stdin;
 10	test10	user10@test.com	0	f
 11	test11	user11@test.com	0	f
 12	test12	user12@test.com	0	f
+19	kaijune	analeeskinner@gmail.com	0	t
+23	ana	    analeeskinner@yahoo.com	0	t
 25	admin_user	user@admin.com	0	t
 \.
 
