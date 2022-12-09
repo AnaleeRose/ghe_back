@@ -7,6 +7,7 @@ RUN apt-get -y install dnsutils
 
 # Create app directory
 WORKDIR /usr/src/app
+CMD [ "mkdir", "/usr/src/app/logs" ]
 
 # Install app dependencies
 # A wildcard is used to ensure both package.json AND package-lock.json are copied
@@ -21,5 +22,3 @@ RUN npm install
 COPY . .
 
 EXPOSE 8000
-
-# CMD [ "node", "server.js" ]

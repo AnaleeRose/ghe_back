@@ -1,12 +1,14 @@
 const router = require('express').Router()
 // const passport = require('../passport')
 const ctrl = require('../controllers')
+const { isLoggedIn, discord } = require("../controllers/auth");
 
 var empty = {"empty": "empty results set"}
 
-router.get('/', ctrl.auth.isLoggedIn);
-router.get('/id/:id', ctrl.auth.findByID);
-router.get('/logout/', ctrl.auth.logout);
-router.post('/discord/', ctrl.auth.findByEmail);
+// check if currently loggedin serverside
+router.get('/', isLoggedIn);
+
+// login or create a user through discord
+router.post('/discord/', discord);
 
 module.exports = router

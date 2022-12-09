@@ -1,120 +1,295 @@
+require('dotenv').config({ path: `.env` })
 const { db } = require("../models");
-
-require('dotenv').config({ path: `.env.${process.env.NODE_ENV}` })
+const winston = require('winston');
+const e = require("express");
+const fetch = require("node-fetch-commonjs");
 var message = {};
 
-
-// takes user ID by get, returns user data in JSON
-module.exports.findByID = function(req, res) {
-    const id = parseInt(req.params.id);
-    db.any("SELECT id, name, email FROM users WHERE id = $1", [id])
-        .then(function(data) {
-             if (data !== null && data.length > 0) {
-                req.session.id = data[0].id
-                req.session.email = data[0].email
-                req.session.name = data[0].name
-                req.session.loggedIn = true
-                var message = [{data: data}]
-                res.status(200).json({ message })
-            } else {
-                req.session.loggedIn = false
-                message = {message: "user info not found"};
-                res.status(200).json({ message })
-            }
-        })
-        .catch(function(e) {
-            req.session.loggedIn = false
-            console.log("GET USER FAILED");
-            console.log(e);
-            message = {message:"findByID query failed"};
-            res.status(200).json({ message })
-        });
-}
+// logger setup
+const logger = winston.createLogger({
+    level: 'info',
+    format: winston.format.json(),
+    defaultMeta: { service: 'user-service' },
+    transports: [
+        new winston.transports.File({ filename: 'error.log', level: 'error' }),
+        new winston.transports.File({ filename: 'combined.log' }),
+    ],
+});
 
 
-// takes email by post, returns user data in JSON
-module.exports.findByEmail = function(req, res) {
-    const { discord_access_token, discord_refresh_token, email } = req.body;
-    var message;
-    // const { authorization } = req.headers;
+// takes discord_access_token, discord_refresh_token, email, username, discord_id by POST
+// returns user data in JSON
+exports.discord = (req, res) => {
+    const { code } = req.body;
+    let address = "", discord_access_token, discord_refresh_token;
     req.session.loggedIn = false
-    db.any("SELECT id, name, email FROM users WHERE email = $1", [email])
-        .then(function(data) {
-            if (data !== null && data.length > 0) {
-                req.session.id = data[0].id
-                req.session.email = data[0].email
-                req.session.name = data[0].name
-                req.session.discord_access_token = discord_access_token
-                req.session.discord_refresh_token = discord_refresh_token
-                data[0].discord_access_token = discord_access_token
-                data[0].discord_refresh_token = discord_refresh_token
-                message = [{message: "user found", data: data}]
 
-                // db.any("INSERT INTO sessions (user_id, discord_access_token, discord_refresh_token) VALUES ($1, $2, %3)", [data[0].id, discord_access_token, discord_refresh_token])
-                //     .then(function(data2) {
-                //         req.session.loggedIn = true
-                //     })
-                //     .catch(function(e) {
-                //         console.log("INSERT INTO sessions FAILED");
-                //         console.log(e);
-                //         message = {message:"INSERT INTO sessions query failed"};
-                //         res.status(200).json({ message })
-                //     });
+    if (code) {
+        // if we have the code from discord:
+        try {
 
-                res.status(200).json({ message })
-            } else {
-                message = {message: "user info not found"};
-                res.status(200).json({ message })
-            }
-        })
-        .catch(function(e) {
-            console.log("GET USER FAILED");
-            console.log(e);
-            message = {message:"findByEmail query failed"};
-            res.status(200).json({ message })
-        });
-}
+            // send it to discord to get tokens
+            fetch('https://discord.com/api/oauth2/token', {
+                method: 'POST',
+                body: new URLSearchParams({
+                    client_id: process.env.DISCORD_CLIENT_ID,
+                    client_secret: process.env.DISCORD_CLIENT_SECRET,
+                    code: code,
+                    grant_type: 'authorization_code',
+                    redirect_uri: process.env.DISCORD_REDIRECT_URL,
+                    scope: 'identify',
+                }).toString(),
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+            })
+            .then((response) => response.json())
+            .then((data) => {
 
-module.exports.createByEmail = function(req, res) {
-    // const { email } = req.body;
-    // // const { authorization } = req.headers;
-    // db.any("SELECT name, email FROM users WHERE email = $1", [email])
-    //     .then(function(data) {
-    //         if (data !== null && data.length > 0) {
-    //             req.session.loggedIn = true
-    //             var user_data = [{message: "user found", data: data}]
-    //             res.status(200).json({ user_data })
-    //         } else {
-    //             const username = post.username;
-    //             message = {message: "user info incomplete", username: "username"};
-    //             res.status(200).json({ message })
-    //         }
-    //     })
-    //     .catch(function(e) {
-    //         console.log("GET USER FAILED");
-    //         console.log(e);
-    //         message = {message:"user not found"};
-    //         res.status(200).json({ message })
-    //     });
-}
+                //send those tokens back to discord to get user info
+                discord_access_token = data.token_type;
+                discord_refresh_token = data.access_token;
+                console.log("discord_access_token 1: " + discord_access_token)
+                fetch('https://discord.com/api/users/@me', {
+                    headers: {
+                        authorization: `${data.token_type} ${data.access_token}`,
+                    },
+                }).then((response) => response.json())
+                .then((discord_res) => {
+
+                    // use the info from discord to find the user's account or create one
+                    if (discord_res.username) {
+                        let discord_id = discord_res.id
+                        let email = discord_res.email
+                        let username = discord_res.username
+                        console.log("discord_access_token 2: " + discord_access_token)
 
 
+                        findOrCreate(discord_access_token, discord_refresh_token, email, username, discord_id, function(user) {
+                            if (user.status && user.data !== false) {
+                                // user info exists
+                                req.session.id = user.data.id
+                                req.session.email = user.data.email
+                                req.session.name = user.data.name
+                                req.session.discord_id = discord_id
+                                console.log("discord_access_token 3: " + discord_access_token)
+                                req.session.discord_access_token = discord_access_token
+                                req.session.discord_refresh_token = discord_refresh_token
+                                req.session.loggedIn = true
 
-
-// checks if email is set in session, returns user data in JSON
-module.exports.isLoggedIn = function(req, res) {
-    if (req.session.loggedIn && req.session.loggedIn == true) {
-        message = {message: "logged in", status: true, email: req.session.email, name: req.session.name};
-        res.status(200).json({ message })
+                                return res.status(200).json({ user })
+                            } else {
+                                // error handling
+                                message = {message: "discord login failed - sending to findorcreate failed"};
+                                logger.log({
+                                    level: 'error',
+                                    message: message
+                                });
+                                return res.status(200).json({ message: user.message, status: user.status });
+                            }
+                        })
+                    } else {
+                        message = {message: "discord login failed - no username from discord"};
+                        logger.log({
+                            level: 'error',
+                            message: message
+                        });
+                        return res.status(200).json({status: false, message: message})
+                    }
+                })
+            });
+        } catch(e) {
+            console.error("FAILED TRY")
+            console.error(e)
+            return res.status(200).json({status: false, message: "no code from discord"})
+        }
     } else {
-        message = {message: "not logged in"};
-        res.status(200).json({ message })
+        console.error("NO CODE")
+        return res.status(200).json({status: false, message: "no code from discord"})
     }
 }
 
-module.exports.logout = function(req, res) {
-    req.session.loggedIn = false
-    req.session = null;
-    message = {message: "logged out"};
-    res.status(200).json({ message })
+
+// checks if email is set in session, returns user data in JSON
+module.exports.isLoggedIn = (req, res) => {
+    if (req.session.loggedIn && req.session.loggedIn == true) {
+        return res.status(200).json({status: true, message: "logged in",  email: req.session.email, name: req.session.name})
+    } else {
+        return res.status(200).json({message: "not logged in"})
+    }
+}
+
+
+
+
+
+// ----------------------------------> 
+// ----------------------> 
+// ---> helper functions
+// ----------------------> 
+// ----------------------------------> 
+
+// finds or creates a user
+const findOrCreate = (discord_access_token, discord_refresh_token, email, username, discord_id, cb) => {
+
+    // add retry 
+    let getUserAttempts = 0
+    let user_exists = false;
+    
+    user_data = {email: email, username: username, discord_id: discord_id, discord_access_token: discord_access_token, discord_refresh_token:discord_refresh_token}
+    console.log(user_data)
+
+    // let text = {"username": username, "email": email, "discord_access_token": discord_access_token, "discord_refresh_token": discord_refresh_token};
+    // logger.log({
+    //     level: 'info',
+    //     message: text
+    // });
+
+    // check if basic variables exist
+    if (email === null || username === null  || discord_id === null) {
+        cb({status: false, message: "user data missing"})
+        return;
+    } else {
+
+        // attempt to find user by email
+        getUserByEmail(email, function(findUser) {
+            if (findUser.status === false) {
+
+                // error handling
+                if (getUserAttempts <= 3) {
+                    getUserAttempts++
+                    //recursive call or whatever bruh
+                } else {
+                    console.log("3 attempt max limit reached. Please try again.")
+                }
+                cb({message: findUser.message, error: "3 attempt max limit reached. Please try again."});
+                return;
+            } else if (findUser.user_data !== false) {
+
+                // user exists, return data
+                let name = findUser.user_data[0].name
+                if (username !== name) {
+                    updateUser(name, email, function(attemptUpdateUser) {
+                        if (!attemptUpdateUser.status) {
+                            console.log("stoppeddd")
+                            cb({ status: false, message: attemptUpdateUser.message })
+                            return;
+                        }
+                    })
+                }
+                console.log("found user:")
+                console.log(findUser.user_data)
+                cb({message: "user found", status: true, data: findUser.user_data})
+                return;
+            } else {
+
+                // user doesnt exist, create and return data
+                addUserToDb(username, email, function(attemptAddUserToDb) {
+                    if (!attemptAddUserToDb.status) {
+                        cb({ message: attemptAddUserToDb.message, status: attemptAddUserToDb.status})
+                        return;
+                    }
+                                                
+                    console.log("found user:")
+                    console.log(attemptAddUserToDb.user_data)
+                    cb({message: "user created", status: true, data: attemptAddUserToDb.user_data})
+                    return;
+                })
+            }
+        })
+    }
+
+}
+
+// updates the username of a user, in case they change their discord name
+const updateUser = (name, email, cb) => {
+    console.log("updateUser query")
+    console.log("UPDATE users SET name='" + name + "' WHERE email='" + email + "';")
+    
+    db.any("UPDATE users SET name=$1 WHERE email=$2;" [name, email])
+        .then(function(data){
+            db.any("SELECT name FROM users WHERE email = $1", [email])
+            .then(function(data){
+                if (data !== null && data.length > 0) {
+                    cb({status: true});
+                    return;
+                }
+                console.log("updateUser no name FAILED");
+                cb({status: false});
+                return;
+            })
+            .catch(function(e) {
+                if (Array.isArray(e) && 'getErrors' in e) {
+                    e = e.getErrors()[0];
+                }
+                console.log("updateUser search CATCH")
+                console.log(e.message || e);
+                cb({status: false, message: "updateUser search CATCH", error: (e.message || e)});
+                return;
+            });
+        })
+    .catch(function(e) {
+        if (Array.isArray(e) && 'getErrors' in e) {
+            e = e.getErrors()[0];
+        }
+        console.log("updateUser CATCH")
+        console.log(e.message || e);
+        cb({status: false, message: "updateUser CATCH", error: (e.message || e)});
+        return;
+    });
+}
+
+// adds a user to the db
+const addUserToDb = (name, email, cb) => {
+    db.any("INSERT INTO users (name, email) VALUES ($1, $2)", [name, email])
+        .then(function(){
+            db.any("SELECT id, name, email FROM users WHERE email = $1", [email])
+                .then(function(data){
+                    if (data !== null && data.length > 0) {
+                        cb({status: true, user_data: data});
+                        return;
+                    }
+                    cb({status: false, message: "addUserToDb get user FAILED"});
+                    return;
+                })
+                .catch(function(e) {
+                    console.log(e);
+                    cb({status: false, message: "addUserToDb get user CATCH"});
+                    return;
+                });
+        })
+    .catch(function(e) {
+        if (Array.isArray(e) && 'getErrors' in e) {
+            e = e.getErrors()[0];
+        }
+        console.log("addUserToDb CATCH")
+        console.log(e.message || e);
+        cb({status: false, message: "addUserToDb CATCH", error: (e.message || e)});
+        return;
+    });
+}
+
+// get a user with email
+function getUserByEmail(email, cb) {
+    console.log("is called")
+    db.any("SELECT id, name, email FROM users WHERE email = $1", [email])
+        .then(function(data){
+            console.log("actually ran")
+            if (data !== null && data.length > 0) {
+                cb({status: true, user_data: data});
+                return;
+            } else {
+                cb({status: true, user_data: false});
+                return;
+            }
+        })
+        .catch(function(e) {
+            if (Array.isArray(e) && 'getErrors' in e) {
+                e = e.getErrors()[0];
+            }
+            console.log("getUserByEmail CATCH")
+            console.log(e.message || e);
+            cb({status: false, message: "getUserByEmail CATCH", error: (e.message || e)});
+            return;
+        });
 }
