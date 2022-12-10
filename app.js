@@ -49,5 +49,8 @@ app.use('/auth', routes.auth);
 app.use('/user', routes.user);
 app.use('/users', routes.user);
 app.use('/circuit', routes.circuit);
+app.get('*',(req,res) => {
+    res.status(204).json({status: false,message:"default"})
+})
 
 module.exports = app;
