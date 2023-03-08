@@ -12,10 +12,10 @@ router.get('/delete/:id', ctrl.user.deleteByID);
 // retrieves tracker info for a user, BROKEN
 router.get('/tracker/:id', ctrl.user.getTrackerInfo);
 
-// logs you out
+// returns list of user ids and discord names
 router.get('/search/', ctrl.user.getAll);
 
-
+// logs out the currently logged in user
 router.get('/logout/', ctrl.user.logout);
 
 //gets a single user by ID

@@ -14,3 +14,15 @@ LEFT JOIN circuits as circuit ON matche.circuit_id = circuit.id
 LEFT JOIN teams as team1 ON team1.id = matche.team_1_id
 LEFT JOIN teams as team2 ON team2.id = matche.team_2_id
 WHERE matche.circuit_id = 1;
+
+
+-- create functions
+CREATE OR REPLACE FUNCTION update_teams_trigger_func()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.last_updated = now(); 
+  RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_teams_trigger BEFORE UPDATE ON teams FOR EACH ROW EXECUTE PROCEDURE  update_teams_trigger_func();

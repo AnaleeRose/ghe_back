@@ -15,7 +15,7 @@ const { discord } = require("./auth");
 
 // returns all user data in JSON
 module.exports.getAll = async(req, res) => {
-    await db.many("SELECT id id, discord_name name FROM users")
+    await db.many("SELECT id id, discord_name name, rl_username rl_username  FROM users")
         .then((data)=>{
             res.status(200).json({ data })
         })
