@@ -116,14 +116,13 @@ module.exports.deleteByID = async(req, res) => {
     const id = parseInt(req.params.id);
     try {
         let teams_deleted = await db.any("DELETE FROM teams WHERE id = $1  RETURNING *;", [id])
-        console.log(teams_deleted)
+        console.log(teams_deleted);
         if (teams_deleted.length >= 1) {
             res.status(200).json({status: true, message: teams_deleted.length + " team(s) have been deleted" })
             return;
         } else {
             res.status(200).json({status: false, message: "no teams deleted"})
             return;
-
         }
     } catch (e) {
         if (Array.isArray(e) && 'getErrors' in e) {
@@ -210,39 +209,35 @@ module.exports.createTeam = async(req, res) => {
 }
 
 module.exports.updateTeam = async(req, res) => {
-    const { name, region, type_id, team_id } = req.body;
+    console.log("req.body")
+    console.log(req.body)
+    const { name, region, type_id, team_id, member_info, deleted_members } = req.body;
     let missing = [];
     if (!name || !region || !type_id || !team_id)  {
         if (!name) missing.push("name")
         if (!region) missing.push("region")
-        if (!type_id || !Common.isInt(type_id)) missing.fpush("type_id")
+        if (!type_id || !Common.isInt(type_id)) missing.push("type_id")
         console.log("res1")
         res.status(200).json({status: false, message: "insufficient info", missing: missing})
         return;
     }
     const type_id_parsed = parseInt(type_id)
     const team_id_parsed = parseInt(team_id)
-    const update_team_query = new PQ("UPDATE teams SET name=$1, region=$2, type_id=$3 WHERE id = $4 RETURNING *;");
-    update_team_query.values = [ name, region, type_id, team_id ];
-    try {
-        let updated_team = await db.one(update_team_query)
-        if (updated_team) {
-            res.status(200).json({ status: true, data: updated_team})
+
+    Model.updateTeam(name, region, type_id, team_id, member_info, deleted_members, function(updated){
+        if (updated.error) {
+            message = {message: "updateTeam - updateTeam error", internal_message: updated.message, error: updated.error};
+            logger.error({message: message});
+            console.log("res4")
+            res.status(200).json({status: false, message: updated.message})
+            return;
+        } else if (updated.status === true) {
+            console.log("res5")
+            res.status(200).json({status: true, message: "team updated"})
             return;
         }
-        res.status(200).json({ status: false, message: "updateTeam failed", error:"unknown"})
-        return;
-    } catch (e) {
-        if (Array.isArray(e) && 'getErrors' in e) {
-            e = e.getErrors()[0];
-        }
-        
-        message = {message: "updateTeam team failed db", db_error: (e.message || e)};
-        logger.error({message: message});
 
-        res.status(200).json({status: false, message: "updateTeam"})
-        return;
-    }
+    });
 
 }
     
