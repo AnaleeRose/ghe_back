@@ -52,7 +52,7 @@ module.exports.getAllTeamUsers = async(req, res) => {
 module.exports.findByID = async(req, res) => {
     console.log("findby id run")
     if (!Common.isInt(req.params.id)) {
-        console.log("bad")
+        console.log("bad id: " . req.params.id)
         res.status(200).json({ status: false, message: "Bad id" })
         return;
     }
@@ -224,17 +224,31 @@ module.exports.updateTeam = async(req, res) => {
     const type_id_parsed = parseInt(type_id)
     const team_id_parsed = parseInt(team_id)
 
+    let sendOnce = true
+    console.log("OUTSIDE updateTeam")
     Model.updateTeam(name, region, type_id, team_id, member_info, deleted_members, function(updated){
-        if (updated.error) {
-            message = {message: "updateTeam - updateTeam error", internal_message: updated.message, error: updated.error};
-            logger.error({message: message});
-            console.log("res4")
-            res.status(200).json({status: false, message: updated.message})
-            return;
-        } else if (updated.status === true) {
-            console.log("res5")
-            res.status(200).json({status: true, message: "team updated"})
-            return;
+        console.log("CALLED updateTeam")
+        console.log("sendOnce")
+        console.log(sendOnce)
+            if (sendOnce) {
+            if (updated.status) {
+                sendOnce = false;
+                console.log("sendOnce")
+                console.log(sendOnce)
+                console.log("res5")
+                res.status(200).json({status: true, message: "team updated"});
+                return;
+            } else if (updated.error) {
+                message = {message: "updateTeam - updateTeam error", internal_message: updated.message, error: updated.error};
+                logger.error({message: message});
+                console.log("res4")
+                console.log(message)
+                sendOnce = false;
+                console.log("sendOnce")
+                console.log(sendOnce)
+                res.status(200).json({status: false, message: updated.message})
+                return;
+            }
         }
 
     });

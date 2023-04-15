@@ -48,9 +48,9 @@ var Model = (function() {
             await db.tx(async t => {
                 // add each team members
                 member_info.forEach(async(member, key)=>{
-                    // message = {message: "ADD TEAM - MEMBER ID", member:member[0]}
-                    // logger.error({message:message})
-                    // console.log(message)
+                    message = {message: "ADD TEAM - MEMBER ID", member:member[0]}
+                    logger.error({message:message})
+                    console.log(message)
 
                     // Make sure member exists
                     console.log("gettype(member[0])")
@@ -62,9 +62,9 @@ var Model = (function() {
                     let check_member_id_query = new PQ("SELECT id FROM users WHERE id = $1");
                     check_member_id_query.values = [ member_id ];
 
-                    // message = {member_id: member_id, type: typeof member_id}
-                    // logger.error({message:message});
-                    // console.log(message);
+                    message = {member_id: member_id, type: typeof member_id}
+                    logger.error({message:message});
+                    console.log(message);
 
                     let check_if_exists = await db.oneOrNone(check_member_id_query);
 
@@ -117,32 +117,52 @@ var Model = (function() {
     }
 
     const updateTeam = async(name, region, type_id, team_id, member_info, deleted_members, cb) => {
-
-            
+        console.log("CALLED updateTeam MODEL")
         await db.tx(async t => {
-            
             const update_team_query = new PQ("UPDATE teams SET name=$1, region=$2, type_id=$3 WHERE id = $4 RETURNING *;");
             update_team_query.values = [ name, region, type_id, team_id ];
             let updated_team = await db.one(update_team_query)
             if (updated_team) {
                 if (member_info) {
-                    await updateTeamUsers(member_info, deleted_members, function(updated_users) {
-                        if (updated_users.error) {
-                            cb({ status: false, message: "team users could not be updated", error: updated_users.error })
-                            return;
-                        } else if (updated_users.status) {
+                    if (deleted_members) {
+                        console.log("deleted_members");
+                        console.log(deleted_members);
+                        console.log("typeof deleted_members");
+                        console.log(typeof deleted_members);
+                        let deleted_members_split_unclean = deleted_members.split(",");
+                        let deleted_members_split = [...new Set(deleted_members_split_unclean)];
+                        
+                        deleted_members_split.forEach((user, index)=>{
+                            let member_id = (Common.isInt(user[0])) ? parseInt(user[0]) : false;
+                            if (!member_id) deleted_members_split.splice(index, 1);
+                        })
+                    } else {
+                        deleted_members_result = true
+                        console.log("deleted_members DOESNT EXIST");
+                    }
+                    let delete_members = (deleted_members == "false" || deleted_members == false) ? false : deleted_members
+                    await updateTeamUsers(member_info, delete_members, team_id, function(updated_users) {
+                        if (updated_users.status) {
+                            console.log("RETURN 2a")
                             cb({ status: true, message: "team and team users were updated successfully"})
+                            return;
+                        } else {
+                            console.log("RETURN 3a")
+                            cb({ status: false, message: "team users could not be updated", error: (updated_users.error) ? updated_users.error : "unknown" })
                             return;
                         }
                     });
-                    // const update_team_users_query = new PQ("UPDATE teams SET name=$1, region=$2, type_id=$3 WHERE id = $4 RETURNING *;");
-                    // update_team_users_query.values = [ "" ];
-                    // let updated_team_users = await db.one(update_team_users_query)
+                    console.log("AFTER RETURN?");
+                    return;
+                    // cb({ status: false, message: "weird stuff", error: "weird stuff" })
+                    // return;
                 } else {
+                    console.log("RETURN 34a")
                     cb({ status: true, message: "team was updated successfully"})
                     return;
                 }
             } else {
+                console.log("RETURN 4a")
                 cb({ status: false, message: "team could not be updated", error: (e.message || e) })
                 return;
             }
@@ -154,56 +174,191 @@ var Model = (function() {
             }  
             message = {message: "createTeam - findTeamByName error", internal_message: "details", error: (e.message || e)};
             logger.error({message: message});
+            console.log("RETURN 5a")
             cb({ status: false, message: "await db.tx({mode}, t => { FAILED", error: (e.message || e) })
             return;
         })
     }
 
-    const updateTeamUsers = async(team_users, deleted_members, cb) => {
+    const updateTeamUsers = async(team_users, deleted_members = false, team_id, cb2) => {
+
+        let deleted_members_result = false;
+        let team_users_result = false;
         console.log("team_users");
         console.log(team_users);
         console.log(typeof team_users);
-
-
-        let team_users_split = team_users.split(",");
-
-        team_users_split.forEach(user => {
-            console.log("user")
-            console.log(user)
-            let user_split = user.split("|");
-            console.log("user_split")
-            console.log(user_split)
-            let member_id = (Common.isInt(user[0])) ? parseInt(user[0]) : "fail";
-            console.log("member_id")
-            console.log(member_id)
-        });
-
+        
         if (deleted_members) {
-                await db.tx(async t => {
-                    console.log("delete these members");
-                    console.log(deleted_members);
-                    deleted_members_split = deleted_members.split(",");
-                        deleted_members_split.forEach(id => {
-                        let member_id = (Common.isInt(id)) ? parseInt(id) : "fail";
-                        let delete_member_query = await db.any("DELETE FROM team_users WHERE id = $1  RETURNING *;", [member_id])
-                    });
-                }).catch((e)=>{
-                    console.log(e)
-                    if (Array.isArray(e) && 'getErrors' in e) {
-                        e = e.getErrors()[0];
-                    }  
-                    message = {message: "updateTeam - updateTeamUsers error", internal_message: "details", error: (e.message || e)};
-                    logger.error({message: message});
-                    cb({ status: false, message: "await db.tx({mode}, t => { FAILED", error: (e.message || e) })
-                    return;
-                })
+            await db.tx(async t => {
+                console.log("delete these members");
+                console.log(deleted_members);
+                
+                let deleted_members_split_unclean = deleted_members.split(",");
+                deleted_members_split = [...new Set(deleted_members_split_unclean)];
+                deleted_members_split.forEach(async (id, index) => {
+                    if (id != "," && id != " " && id.length > 0) {
+                        let member_id = (Common.isInt(id)) ? parseInt(id) : false;
+                        if (member_id) {
+                            console.log("orig id")
+                            console.log(id)
+                            let delete_member_query = await db.result("DELETE FROM team_users WHERE user_id = $1 AND team_id = $2;", [member_id, team_id], a => a.rowCount);
+                            
+                            console.log("delete_member_query")
+                            console.log(delete_member_query)
+                            
+                            if (delete_member_query == 0) {
+                                console.log("COULD NOT DELETE MEMBER: " + member_id)
+                                console.log("RETURN 1");
+                                cb2({ status: false, message: "Member could not be deleted", error: "Member could not be deleted"});
+                                return;
+                            } else {
+                                deleted_members_split.splice(index, 1);
+                            }
+                        } else {
+                            console.log("member_id failed:");
+                            console.log(id);
+                            console.log("member_id failed END");
+                        }
+
+                    }
+                });
+
+                if (deleted_members_split.length == 0) {
+                    deleted_members_result = true;
+                }
+            }).catch((e)=>{
+                console.log(e)
+                if (Array.isArray(e) && 'getErrors' in e) {
+                    e = e.getErrors()[0];
+                }  
+                message = {message: "updateTeam - updateTeamUsers error", internal_message: "details", error: (e.message || e)};
+                logger.error({message: message});
+                console.log("CATCH")
+                console.log(e.message || e)
+                console.log("RETURN 2");
+                cb2({ status: false, message: "await db.tx({mode}, t => { FAILED", error: (e.message || e) })
+                return;
+            })
             
         } else {
-            console.log("doesnt exist");
+            console.log("none to delete");
         }
 
-        cb({ status: false, message: "updateTeamUsers"})
-        // cb({ status: false, message: "updateTeamUsers", error: (e.message || e) })
+
+        
+        let team_users_split_unclean = team_users.split(",");
+        let team_users_split = [...new Set(team_users_split_unclean)];
+        console.log("team_users_split 1")
+        console.log(team_users_split)
+        await db.tx(async t => {
+            team_users_split.forEach(async (member, index) => {
+                console.log("user")
+                console.log(member)
+                let member_split = member.split("|");
+                console.log("member_split")
+                console.log(member_split)
+                let member_id = (Common.isInt(member[0])) ? parseInt(member[0]) : false;
+                if (!member_id) {
+                    console.log("invalid ID: ");
+                    console.log(member[0]);
+                    team_users_split.splice(index, 1);
+                    console.log("team_users_split invalid")
+                    console.log(team_users_split)
+                } else {
+                        console.log("team_users_split member_id")
+                        console.log(member_id)
+
+                        // Make sure member exists
+                        console.log("gettype(member[0])")
+                        console.log(typeof member[0])
+                        console.log("parseInt(member[0])")
+                        console.log(parseInt(member[0]))
+
+                        let check_member_id_query = new PQ("SELECT id FROM users WHERE id = $1");
+                        check_member_id_query.values = [ member_id ];
+
+                        message = {member_id: member_id, type: typeof member_id}
+                        logger.error({message:message});
+                        console.log("check_member_id_query");
+                        console.log(message);
+                        
+                        const check_if_exists = await db.any(check_member_id_query);
+
+                        let check_if_in_team_query = new PQ("SELECT id FROM team_users WHERE user_id = $1 AND team_id = $2");
+                        check_if_in_team_query.values = [ member_id, team_id ];
+                        const check_if_in_team = await db.any(check_if_in_team_query);
+
+                        
+
+                        // message = {check_member_id_query:check_member_id_query}
+                        // logger.error({message:message});
+                        // console.log(message);
+
+                        if (check_if_exists.length > 0 && check_if_in_team.length == 0) {
+                            // add member to team
+                            let add_member_query = new PQ("INSERT INTO team_users(team_id, user_id) VALUES ($1, $2) RETURNING id;");
+                            add_member_query.values = [team_id,member_id];
+                            let add_member_results = await db.one(add_member_query);
+                            if (add_member_results) {
+                                message = {message: "add_member_results TRUE"}
+                                logger.error({message:message});
+                                console.log(message);
+                                team_users_split.splice(index, 1);
+                            } else {
+                                message = {message: "add_member_query FAILED", add_member_query:add_member_query}
+                                logger.error({message:message});
+                                console.log(message)
+                                cb2({ status: false, message: "Member could not be added", error: "Member could not be added" })
+                                console.log("RETURN 3");
+                                return;
+                            }
+                        } else {
+                            console.log("check_if_exists.length")
+                            console.log(check_if_exists.length)
+                            console.log("check_if_in_team_query.length")
+                            console.log(check_if_in_team.length)
+                            message = "member does not exist";
+                            team_users_split.splice(index, 1);
+                        }
+                }
+
+                team_users_split.splice(index, 1);
+                console.log("team_users_split ...")
+                console.log(team_users_split)
+            })
+        }).catch((e)=>{
+            console.log(e)
+            if (Array.isArray(e) && 'getErrors' in e) {
+                e = e.getErrors()[0];
+            }  
+            message = {message: "updateTeam - updateTeamUsers error", internal_message: "details", error: (e.message || e)};
+            logger.error({message: message});
+            console.log("CATCH")
+            console.log(e.message || e)
+            cb2({ status: false, message: "await db.tx({mode}, t => { FAILED", error: (e.message || e) });
+            console.log("RETURN 4");
+            return;
+        })
+
+
+        if (team_users_split.length == 0) {
+            team_users_result = true;
+        }
+
+
+        if (team_users_result && deleted_members_result) {
+            cb2({ status: true});
+            console.log("RETURN 5");
+            return;
+        } else {
+            console.log("team_users_result");
+            console.log(team_users_result);
+            console.log("deleted_members_result");
+            console.log(deleted_members_result);
+            console.log("RETURN 6");
+            cb2({ status: false, message: "updateTeamUsers"});
+            return;
+        }
 
     }
 
@@ -233,7 +388,9 @@ var Model = (function() {
 
                 message = {message: "GOOD: Member id: " + member_id + "| IsSub: " + is_sub};
                 logger.error({message: message});
+
                 seperated_member_info[x] = [member_id, is_sub];
+                
                 message = {message: "seperated_member_info", seperated_member_info: seperated_member_info};
                 logger.error({message: message});
                 x++
@@ -278,7 +435,7 @@ var Model = (function() {
                 e = e.getErrors()[0];
             }  
             console.log("CHECK")
-            console.log((e.message || e))
+            console.log((e.message ))
             
             cb({ status: false, message: "findTeamByName failed db", error: (e.message || e) })
             return;
@@ -287,7 +444,7 @@ var Model = (function() {
 
     const findTeamByID = async(id, cb) => {
         try {
-            const getTeam = new PQ('SELECT id, name FROM teams WHERE id = $1');
+            const getTeam = new PQ('SELECT id, name, region, type_id FROM teams WHERE id = $1');
             getTeam.values = [id];
             let team_data = await db.one(getTeam);
             if (team_data.length !== 0)  {
